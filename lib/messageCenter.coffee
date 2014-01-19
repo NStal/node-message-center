@@ -58,7 +58,7 @@ class MessageCenter extends (require "events").EventEmitter
     registerApi:(name,handler,overwrite)->
         name = name.trim()
         if not handler
-            throw "need handler to work"
+            throw new Error "need handler to work"
         for api,index in @apis
             if api.name is name
                 if not overwrite
@@ -74,13 +74,18 @@ class MessageCenter extends (require "events").EventEmitter
             if @connection isnt connection
                 # connection changed.. i can't handle you
                 return
-            @handleMessage(message)
+            try
+                @handleMessage(message)
+            catch e
+                @emit "error",e
     unsetConnection:()->
         @connection = null
     response:(id,err,data)->
+        message = @stringify({id:id,type:"response",data:data,error:err})
         if not @connection
+            @emit "message",message
             return
-        @connection.send @stringify({id:id,type:"response",data:data,error:err})
+        @connection.send 
     invoke:(name,data,callback)->
         callback = callback or ()->true
         if not @connection
@@ -92,22 +97,25 @@ class MessageCenter extends (require "events").EventEmitter
         ,name:name
         ,data:data
         }
-        @connection.send @stringify(req)
         # date is used for check timeout or clear old broken waiters
         @invokeWaiters.push {request:req,id:req.id,callback:callback,date:new Date}
+        message = @stringify(req)
+        if @connection
+            @connection.send message
+        return message
     fireEvent:(name,data)->
-        if not @connection
-            # remote is down there are nothing we can do here
-            return false
-        @connection.send @stringify({type:"event",name:name,data:data})
+        message = @stringify({type:"event",name:name,data:data})
+        if @connection
+            @connection.send message
+        return message
     handleMessage:(message)->
         try
             info = @parse(message)
         catch e
             console.error e
-            throw  "invalid message #{message}"
+            throw  new Error "invalid message #{message}"
         if not info.type or info.type not in ["invoke","event","response"]
-            throw  "invalid message #{message} invalid info type"
+            throw  new Error "invalid message #{message} invalid info type"
             return
         if info.type is "response"
             @handleResponse(info)
@@ -117,31 +125,30 @@ class MessageCenter extends (require "events").EventEmitter
             @handleEvent(info)
     handleEvent:(info)->
         if not info.name
-            throw "invalid message #{JSON.stringify(message)}"
+            throw new Error "invalid message #{JSON.stringify(info)}"
         @emit "event/"+info.name,info.data
         
     handleResponse:(info)->
         if not info.id
-            throw "invalid message #{JSON.stringify(info)}"
+            throw new Error "invalid message #{JSON.stringify(info)}"
         target = null
         for waiter in @invokeWaiters
             if waiter.id is info.id
                 target = waiter
                 break
         if not target
-            throw "unmatched response #{JSON.stringify(message)}"
+            throw new Error "unmatched response #{JSON.stringify(info)}"
         target.callback(info.error,info.data)
     handleInvoke:(info)->
         if not info.id or not info.name
-            throw "invalid message #{JSON.stringify(message)}"
+            throw new Error "invalid message #{JSON.stringify(info)}"
         target = null
         for api in @apis
             if api.name is info.name
                 target = api
                 break
         if not target
-            @response(info.id,"#{info.name} api not found")
-            return
+            return @response(info.id,"#{info.name} api not found")
         target.handler info.data,(err,data)=>
             @response info.id,err,data
 exports.MessageCenter = MessageCenter
