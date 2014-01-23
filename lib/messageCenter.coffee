@@ -8,11 +8,10 @@
 # for Event we only dispatch them to who ever cares but dont return anything
 # for Invoke response
 # InvokeResponse: {id:'original id',type:'response',data:data,error:err}
-
 class MessageCenter extends (require "events").EventEmitter
-    stringify:(obj)->
+    @stringify:(obj)->
         return JSON.stringify(@normalize(obj))
-    normalize:(obj)->
+    @normalize:(obj)->
         if typeof obj isnt "object"
             return obj
         if obj instanceof Array
@@ -28,7 +27,7 @@ class MessageCenter extends (require "events").EventEmitter
             for prop of obj
                 _[prop] = @normalize(obj[prop])
             return _
-    denormalize:(obj)->
+    @denormalize:(obj)->
         if typeof obj isnt "object"
             return obj
         if obj is null
@@ -44,7 +43,7 @@ class MessageCenter extends (require "events").EventEmitter
             for prop of obj
                 _[prop] = @denormalize(obj[prop])
             return _
-    parse:(str)->
+    @parse:(str)->
         json = JSON.parse(str)
         _ = @denormalize json
         return _
@@ -52,6 +51,7 @@ class MessageCenter extends (require "events").EventEmitter
         @idPool = 1000
         @invokeWaiters = []
         @apis = []
+        @timeout = 1000 * 60
         super()
     getInvokeId:()->
         return @idPool++;
@@ -70,7 +70,7 @@ class MessageCenter extends (require "events").EventEmitter
         @apis.push {name:name,handler:handler}
     setConnection:(connection)->
         @connection = connection
-        @connection.on "message",(message)=>
+        @_handler = (message)=>
             if @connection isnt connection
                 # connection changed.. i can't handle you
                 return
@@ -78,14 +78,17 @@ class MessageCenter extends (require "events").EventEmitter
                 @handleMessage(message)
             catch e
                 @emit "error",e
+        @connection.on "message",@_handler
     unsetConnection:()->
+        @connection.removeEventListener("message",@_handler)
+        @_handler = null
         @connection = null
     response:(id,err,data)->
-        message = @stringify({id:id,type:"response",data:data,error:err})
+        message = MessageCenter.stringify({id:id,type:"response",data:data,error:err})
         if not @connection
             @emit "message",message
             return
-        @connection.send 
+        @connection.send message
     invoke:(name,data,callback)->
         callback = callback or ()->true
         if not @connection
@@ -98,31 +101,45 @@ class MessageCenter extends (require "events").EventEmitter
         ,data:data
         }
         # date is used for check timeout or clear old broken waiters
-        @invokeWaiters.push {request:req,id:req.id,callback:callback,date:new Date}
-        message = @stringify(req)
+        waiter = {request:req,id:req.id,callback:callback,date:new Date}
+        @invokeWaiters.push waiter
+        message = MessageCenter.stringify(req)
+        controller = {
+            _timer:null
+            ,waiter:waiter
+            ,timeout:(value)->
+                if @_timer
+                    clearTimeout @_timer
+                @_timer = setTimeout controller.clear,value
+            ,clear:()=>
+                @clearInvokeWaiter waiter.id
+                waiter.callback(new Error "timeout")
+        }
+        
+        waiter.controller = controller
         if @connection
             @connection.send message
-        return message
+        return controller
     fireEvent:(name,data)->
-        message = @stringify({type:"event",name:name,data:data})
+        message = MessageCenter.stringify({type:"event",name:name,data:data})
         if @connection
             @connection.send message
         return message
     handleMessage:(message)->
         try
-            info = @parse(message)
+            info = MessageCenter.parse(message)
         catch e
-            console.error e
             throw  new Error "invalid message #{message}"
         if not info.type or info.type not in ["invoke","event","response"]
             throw  new Error "invalid message #{message} invalid info type"
-            return
         if info.type is "response"
             @handleResponse(info)
         else if info.type is "invoke"
             @handleInvoke(info)
-        else
+        else if info.type is "event"
             @handleEvent(info)
+        else
+            throw new Error "invalid message"
     handleEvent:(info)->
         if not info.name
             throw new Error "invalid message #{JSON.stringify(info)}"
@@ -131,14 +148,22 @@ class MessageCenter extends (require "events").EventEmitter
     handleResponse:(info)->
         if not info.id
             throw new Error "invalid message #{JSON.stringify(info)}"
-        target = null
-        for waiter in @invokeWaiters
+        found = @invokeWaiters.some (waiter,index)=>
             if waiter.id is info.id
-                target = waiter
-                break
-        if not target
-            throw new Error "unmatched response #{JSON.stringify(info)}"
-        target.callback(info.error,info.data)
+                waiter.callback(info.error,info.data)
+                @clearInvokeWaiter(info.id);
+                return true
+            return false
+        # if not found it may either a timeout error
+        # just fail silently
+        return found
+    clearInvokeWaiter:(id)->
+        @invokeWaiters = @invokeWaiters.filter (waiter)->
+            if waiter.id is id
+                if waiter.controller and waiter.controller._timer
+                    clearTimeout(waiter.controller._timer)
+                return false
+            return true
     handleInvoke:(info)->
         if not info.id or not info.name
             throw new Error "invalid message #{JSON.stringify(info)}"
@@ -151,4 +176,5 @@ class MessageCenter extends (require "events").EventEmitter
             return @response(info.id,"#{info.name} api not found")
         target.handler info.data,(err,data)=>
             @response info.id,err,data
-exports.MessageCenter = MessageCenter
+module.exports = MessageCenter
+module.exports.MessageCenter = MessageCenter

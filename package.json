@@ -1,16 +1,21 @@
 {
-  "name": "message-center",
-  "version": "0.0.2",
-  "description": "A common event based message center that can handle invoke/event",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [
-    "rpc",
-    "message",
-    "event"
-  ],
-  "author": "NStal",
-  "license": "MIT"
+    "name": "message-center",
+    "version": "0.0.4",
+    "description": "A common event based message center that can handle invoke/event",
+    "main": "index.js",
+    "scripts": {
+        "test": "mocha -R spec -b --compilers .coffee:coffee-script ./test/mocha.coffee"
+    },
+    "keywords": [
+        "rpc",
+        "message",
+        "event"
+    ],
+    "devDependencies":{
+        "mocha":"*"
+        ,"coffee-script":"*"
+        ,"ws":"*"
+    },
+    "author": "NStal",
+    "license": "MIT"
 }
