@@ -11,10 +11,11 @@
         "message",
         "event"
     ],
+    "dependencies":{
+        "coffee-script":"*"
+    },
     "devDependencies":{
-        "mocha":"*"
-        ,"coffee-script":"*"
-        ,"ws":"*"
+        "ws":"*"
     },
     "author": "NStal",
     "license": "MIT"

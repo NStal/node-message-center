@@ -1,2 +1,4 @@
-require("coffee-script")
-exports.MessageCenter = require("./lib/messageCenter.coffee").MessageCenter;
+require("coffee-script");
+var MessageCenter = require("./lib/messageCenter.coffee").MessageCenter;
+module.exports = MessageCenter;
+module.exports.MessageCenter = MessageCenter;

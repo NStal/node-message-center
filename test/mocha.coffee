@@ -1,4 +1,4 @@
-MessageCenter = require("../lib/messageCenter.coffee")
+MessageCenter = require("../")
 WebSocket = require("ws")
 WebSocketServer = WebSocket.Server
 describe "test message center",()->
