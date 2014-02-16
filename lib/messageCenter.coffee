@@ -80,15 +80,20 @@ class MessageCenter extends (require "events").EventEmitter
                 @emit "error",e
         @connection.on "message",@_handler
     unsetConnection:()->
-        @connection.removeEventListener("message",@_handler)
+        if @connection
+            @connection.removeListener("message",@_handler)
         @_handler = null
         @connection = null
+        @clearAll()
     response:(id,err,data)->
         message = MessageCenter.stringify({id:id,type:"response",data:data,error:err})
         if not @connection
             @emit "message",message
             return
-        @connection.send message
+        try
+            @connection.send message
+        catch e
+            return
     invoke:(name,data,callback)->
         callback = callback or ()->true
         if not @connection
@@ -111,19 +116,27 @@ class MessageCenter extends (require "events").EventEmitter
                 if @_timer
                     clearTimeout @_timer
                 @_timer = setTimeout controller.clear,value
-            ,clear:()=>
+            ,clear:(error)=>
                 @clearInvokeWaiter waiter.id
-                waiter.callback(new Error "timeout")
+                waiter.callback(error || new Error "timeout")
         }
         
         waiter.controller = controller
+        controller.timeout(@timeout)
         if @connection
-            @connection.send message
+            try
+                @connection.send message
+            catch e
+                controller.clear(new Error("connection not opened"))
+                return
         return controller
     fireEvent:(name,data)->
         message = MessageCenter.stringify({type:"event",name:name,data:data})
         if @connection
-            @connection.send message
+            try
+                @connection.send message
+            catch e
+                return message
         return message
     handleMessage:(message)->
         try
@@ -176,5 +189,11 @@ class MessageCenter extends (require "events").EventEmitter
             return @response(info.id,"#{info.name} api not found")
         target.handler info.data,(err,data)=>
             @response info.id,err,data
+    clearAll:()->
+        while @invokeWaiters[0]
+            waiter = @invokeWaiters[0]
+            @clearInvokeWaiter(waiter.id)
+            waiter.callback(new Error "abort")
+        
 module.exports = MessageCenter
 module.exports.MessageCenter = MessageCenter

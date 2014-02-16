@@ -20,13 +20,49 @@ describe "test message center",()->
             Mb.invoke "ping",{},(err,data)->
                 console.assert data is "pong"
                 done()
-    it "test invoke time out",(done)->
-        req = Mb.invoke "delay",1000,(err,result)->
+    it "test default timeout",(done)->
+        Mb.timeout = 300
+        Mb.invoke "delay",500,(err,result)->
             console.assert err.message is "timeout"
             done()
-        req.timeout 500
+    it "test invoke time out",(done)->
+        req = Mb.invoke "delay",500,(err,result)->
+            console.assert err.message is "timeout"
+            done()
+        req.timeout 300
+    it "test invoke not time out",(done)->
+        req = Mb.invoke "delay",500,(err,result)->
+            console.assert !err
+            done()
+        req.timeout 1000
+    it "test invoke cleared with custom error",(done)->
+        req = Mb.invoke "delay",500,(err,result)-> 
+            console.assert err is "customError"
+            done()
+        req.timeout 1000
+        clear = ()->
+            req.clear("customError")
+        setTimeout clear,100
+
     it "test event",(done)->
         Ma.on "event/hello",(data)->
             console.assert data is "hello"
             done()
         Mb.fireEvent "hello","hello"
+    it "test clear all",(done)->
+        first = false
+        Mb.invoke "delay",1000,(err,result)->
+            console.assert first is false
+            first = true
+            console.assert err.message is "abort"
+        Mb.invoke "delay",1000,(err,result)->
+            console.assert first is true
+            console.assert err.message is "abort"
+            done()
+        Mb.clearAll()
+    it "test unset connect",(done)->
+        Mb.invoke "delay",1000,(err,result)->
+            console.assert err.message is "abort"
+            done()
+        Ma.unsetConnection()
+        Mb.unsetConnection()
