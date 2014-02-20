@@ -96,9 +96,6 @@ class MessageCenter extends (require "events").EventEmitter
             return
     invoke:(name,data,callback)->
         callback = callback or ()->true
-        if not @connection
-            callback new Error "connect fail"
-            return
         req = {
         type:"invoke"
         ,id:@getInvokeId()
@@ -117,8 +114,7 @@ class MessageCenter extends (require "events").EventEmitter
                     clearTimeout @_timer
                 @_timer = setTimeout controller.clear,value
             ,clear:(error)=>
-                @clearInvokeWaiter waiter.id
-                waiter.callback(error || new Error "timeout")
+                @clearInvokeWaiter waiter.id,error || "timeout"
         }
         
         waiter.controller = controller
@@ -127,7 +123,7 @@ class MessageCenter extends (require "events").EventEmitter
             try
                 @connection.send message
             catch e
-                controller.clear(new Error("connection not opened"))
+                controller.clear("connection not opened")
                 return
         return controller
     fireEvent:(name,data)->
@@ -164,17 +160,19 @@ class MessageCenter extends (require "events").EventEmitter
         found = @invokeWaiters.some (waiter,index)=>
             if waiter.id is info.id
                 waiter.callback(info.error,info.data)
-                @clearInvokeWaiter(info.id);
+                @clearInvokeWaiter(info.id,null);
                 return true
             return false
         # if not found it may either a timeout error
         # just fail silently
         return found
-    clearInvokeWaiter:(id)->
+    clearInvokeWaiter:(id,error)->
         @invokeWaiters = @invokeWaiters.filter (waiter)->
             if waiter.id is id
                 if waiter.controller and waiter.controller._timer
                     clearTimeout(waiter.controller._timer)
+                if error
+                    waiter.callback(error)
                 return false
             return true
     handleInvoke:(info)->
@@ -192,8 +190,7 @@ class MessageCenter extends (require "events").EventEmitter
     clearAll:()->
         while @invokeWaiters[0]
             waiter = @invokeWaiters[0]
-            @clearInvokeWaiter(waiter.id)
-            waiter.callback(new Error "abort")
+            @clearInvokeWaiter(waiter.id,"abort")
         
 module.exports = MessageCenter
 module.exports.MessageCenter = MessageCenter
