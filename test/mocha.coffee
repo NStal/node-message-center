@@ -23,11 +23,11 @@ describe "test message center",()->
     it "test default timeout",(done)->
         Mb.timeout = 300
         Mb.invoke "delay",500,(err,result)->
-            console.assert err.message is "timeout"
+            console.assert err is "timeout"
             done()
     it "test invoke time out",(done)->
         req = Mb.invoke "delay",500,(err,result)->
-            console.assert err.message is "timeout"
+            console.assert err is "timeout"
             done()
         req.timeout 300
     it "test invoke not time out",(done)->
@@ -54,15 +54,22 @@ describe "test message center",()->
         Mb.invoke "delay",1000,(err,result)->
             console.assert first is false
             first = true
-            console.assert err.message is "abort"
+            console.assert err is "abort"
         Mb.invoke "delay",1000,(err,result)->
             console.assert first is true
-            console.assert err.message is "abort"
+            console.assert err is "abort"
             done()
         Mb.clearAll()
+    it "test clear all shouldn't fire already excuted invokes",(done)->
+        
+        Mb.invoke "ping",{},(err,result)->
+            console.assert not err
+            console.assert result is "pong"
+            Mb.clearAll()
+            done()
     it "test unset connect",(done)->
         Mb.invoke "delay",1000,(err,result)->
-            console.assert err.message is "abort"
+            console.assert err is "abort"
             done()
         Ma.unsetConnection()
         Mb.unsetConnection()

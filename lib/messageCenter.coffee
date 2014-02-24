@@ -159,8 +159,8 @@ class MessageCenter extends (require "events").EventEmitter
             throw new Error "invalid message #{JSON.stringify(info)}"
         found = @invokeWaiters.some (waiter,index)=>
             if waiter.id is info.id
-                waiter.callback(info.error,info.data)
                 @clearInvokeWaiter(info.id,null);
+                waiter.callback(info.error,info.data)
                 return true
             return false
         # if not found it may either a timeout error
