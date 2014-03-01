@@ -1,9 +1,9 @@
-MessageCenter is a protocol independant RPC protocol base on json. It's a more human friendly protocol than machine friendly one, To use this protocol the underlying transfer layer should meet these requirements.
+MessageCenter is a transfer layer independant RPC protocol base on json. It's a more human friendly protocol than machine friendly one. To use this protocol the underlying transfer layer should meet these requirements.
 
 1. Can send block of data.
 2. Each block of data should either be completely recieved without any mistake or completely droped.
 
-Each block of data is a JSON with some special field, I will describe it latter and let us see some example of using node-message-center with ws module a great websocket implementation in nodejs.
+Each block of data is a JSON with some special field, I will describe it latter and let us see some example of using node-message-center with ws - a great websocket implementation in nodejs.
 
 # Install and test
 ```bash
@@ -15,6 +15,8 @@ npm install message-center
 cd node_modules/message-center
 npm test
 ```
+
+# Example
 
 ```javascript
 WebSocket = require("ws");
@@ -55,7 +57,7 @@ mcServerSide.registerApi("areYouServer",function(data,callback){
 
 ```
 
-MessageCenter has a default time out of 60s, if you don`t like it you can set it manually.
+MessageCenter has a default timeout of 60s, if you don`t like it you can set it manually.
 ```javascript
 var invoke = mcClientSide.invoke("delayReturn",5000,function(err,data){
     console.error(err,data);
