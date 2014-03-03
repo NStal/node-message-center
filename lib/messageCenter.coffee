@@ -44,6 +44,7 @@ class MessageCenter extends (require "events").EventEmitter
                 _[prop] = @denormalize(obj[prop])
             return _
     @parse:(str)->
+        str = decodeURIComponent(str)
         json = JSON.parse(str)
         _ = @denormalize json
         return _
@@ -91,7 +92,7 @@ class MessageCenter extends (require "events").EventEmitter
             @emit "message",message
             return
         try
-            @connection.send message
+            @connection.send encodeURIComponent message
         catch e
             return
     invoke:(name,data,callback)->
@@ -121,7 +122,7 @@ class MessageCenter extends (require "events").EventEmitter
         controller.timeout(@timeout)
         if @connection
             try
-                @connection.send message
+                @connection.send encodeURIComponent message
             catch e
                 controller.clear("connection not opened")
                 return
@@ -130,7 +131,7 @@ class MessageCenter extends (require "events").EventEmitter
         message = MessageCenter.stringify({type:"event",name:name,data:data})
         if @connection
             try
-                @connection.send message
+                @connection.send encodeURIComponent message
             catch e
                 return message
         return message
