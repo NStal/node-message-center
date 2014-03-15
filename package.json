@@ -1,6 +1,6 @@
 {
     "name": "message-center",
-    "version": "0.1.0",
+    "version": "0.1.2",
     "description": "A common event based message center that can handle invoke/event",
     "main": "index.js",
     "scripts": {
