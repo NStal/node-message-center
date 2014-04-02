@@ -2,6 +2,8 @@
     "name": "message-center",
     "version": "0.1.2",
     "description": "A common event based message center that can handle invoke/event",
+    
+    "repository":"https://github.com/NStal/node-message-center",
     "main": "index.js",
     "scripts": {
         "test": "mocha -R spec -b --compilers .coffee:coffee-script ./test/mocha.coffee"
