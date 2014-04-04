@@ -1,4 +1,11 @@
-MessageCenter is a transfer layer independant RPC protocol base on json. It's a more human friendly protocol than machine friendly one. To use this protocol the underlying transfer layer should meet these requirements.
+MessageCenter is a transfer layer independant RPC protocol base on json. It's a more human friendly protocol than machine friendly one. 
+
+Feature:
+1. transparent javascript type serialize (Buffer,Date)
+2. support reliable RPC call and not reliable event dispatch.
+3. support streaming with easy to use API.
+
+To use this protocol the underlying transfer layer should meet these requirements.
 
 1. Can send block of data.
 2. Each block of data should either be completely recieved without any mistake or completely droped.
@@ -78,3 +85,31 @@ mcClientSide.on("event/archive/update",function(data){
 })
 ```
 
+Streaming
+```javascript
+mcServerSide.registerApi("anyApi",function(_,callback){
+    var stream = mcServerSide.createStream();
+    // transfer just like normal object
+    callback(null,stream)
+    stream.write("can you get me?");
+    stream.end("bye!");
+})
+mcClientSide.invoke("anyApi",{},function(err,stream){
+    var result = [];
+    stream.on("data",function(data){
+        result.push(data);
+    })
+    stream.on("end",function(){
+        console.log("stream end");
+        console.log(result.join("\n"));
+    });
+    return;
+})
+```
+
+# General error handle designs:
+1. Any error caused by underlying connection will just fail silently.
+2. Any error caused by broken data will emit an error event.
+3. Other exception like broken paramaters will just throw.
+
+# Notes:
