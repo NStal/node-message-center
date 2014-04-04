@@ -20,6 +20,21 @@ describe "test message center",()->
             Mb.invoke "ping",{},(err,data)->
                 console.assert data is "pong"
                 done()
+    it "test stream implementation",(done)->
+        Mb.registerApi "getTestStream",(data,callback)->
+            callback null,{stream:{}}
+        Ma.invoke "getTestStream",{},(err,result)->
+            console.assert result.stream instanceof MessageCenter.ReadableStream
+            datas = []
+            result.stream.on "data",(data)->
+                datas.push data
+            result.stream.on "end",(data)->
+                console.assert datas.length is 3
+                console.assert datas[0] = 1
+                console.assert datas[1].prop = "value"
+                console.assert Buffer.isBuffer datas[2]
+                console.assert datas[2].toString() is "I'm a buffer"
+                done()
     it "test default timeout",(done)->
         Mb.timeout = 300
         Mb.invoke "delay",500,(err,result)->
@@ -78,3 +93,4 @@ describe "test message center",()->
         Ma.invoke "test",{},(err,result)->
             console.assert err.message is "connection not set"
             done()
+            
