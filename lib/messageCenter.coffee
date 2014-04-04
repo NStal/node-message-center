@@ -8,7 +8,17 @@
 # for Event we only dispatch them to who ever cares but dont return anything
 # for Invoke response
 # InvokeResponse: {id:'original id',type:'response',data:data,error:err}
-class MessageCenter extends (require "events").EventEmitter
+#
+# Strategies:
+# When it's a connection error, fail silently. (connection independant,
+# you should be able to handle it)
+#
+# When it's an broken data format, emit an error. unlikely.
+#
+# In case of silent, invoke should eventually fail due to a timeout.
+# Other type of RPC are designed for totally not fail concerned.
+EventEmitter = (require "events").EventEmitter
+class MessageCenter extends EventEmitter
     @stringify:(obj)->
         return JSON.stringify @normalize obj
     @normalize:(obj)->
@@ -22,37 +32,45 @@ class MessageCenter extends (require "events").EventEmitter
             return {__mc_type:"buffer",value:obj.toString("base64")}
         else if obj instanceof Date
             return {__mc_type:"date",value:obj.getTime()}
+        else if obj instanceof WritableStream
+            return {__mc_type:"stream",id:obj.id}
         else
             _ = {}
             for prop of obj
                 _[prop] = @normalize(obj[prop])
             return _
-    @denormalize:(obj)->
+    @denormalize:(obj,option = {})->
         if typeof obj isnt "object"
             return obj
         if obj is null
             return null
         if obj instanceof Array
-            return (@denormalize item for item in obj)
+            return (@denormalize(item,option) for item in obj)
         else if obj.__mc_type is "buffer"
             return new Buffer(obj.value,"base64")
         else if obj.__mc_type is "date"
             return new Date(obj.value)
+        else if obj.__mc_type is "stream"
+            return new ReadableStream(option.owner)
         else
             _ = {}
             for prop of obj
-                _[prop] = @denormalize(obj[prop])
+                _[prop] = @denormalize(obj[prop],option)
             return _
-    @parse:(str)->
+    @parse:(str,option)->
         json = JSON.parse(str)
-        _ = @denormalize json
+        _ = @denormalize json,option
         return _
     constructor:()->
         @idPool = 1000
         @invokeWaiters = []
         @apis = []
         @timeout = 1000 * 60
+        @streams = []
         super()
+    stringify:(data)->
+        # maybe add size limit check in future
+        return MessageCenter.stringify(data)
     getInvokeId:()->
         return @idPool++;
     registerApi:(name,handler,overwrite)->
@@ -62,7 +80,7 @@ class MessageCenter extends (require "events").EventEmitter
         for api,index in @apis
             if api.name is name
                 if not overwrite
-                    throw new Eror "duplicated api name #{name}"
+                    throw new Error "duplicated api name #{name}"
                 else
                     # overwrite
                     @apis[index] = null
@@ -84,9 +102,12 @@ class MessageCenter extends (require "events").EventEmitter
             @connection.removeListener("message",@_handler)
         @_handler = null
         @connection = null
+        for stream in @streams.slice()
+            stream.close()
+        @emit "unsetConnection"
         @clearAll()
     response:(id,err,data)->
-        message = MessageCenter.stringify({id:id,type:"response",data:data,error:err})
+        message = @stringify({id:id,type:"response",data:data,error:err})
         if not @connection
             # fail silently
             # @emit "message",message
@@ -106,7 +127,7 @@ class MessageCenter extends (require "events").EventEmitter
         # date is used for check timeout or clear old broken waiters
         waiter = {request:req,id:req.id,callback:callback,date:new Date}
         @invokeWaiters.push waiter
-        message = MessageCenter.stringify(req)
+        message = @stringify(req)
         controller = {
             _timer:null
             ,waiter:waiter
@@ -130,7 +151,7 @@ class MessageCenter extends (require "events").EventEmitter
             controller.clear(new Error "connection not set")
         return controller
     fireEvent:(name,data)->
-        message = MessageCenter.stringify({type:"event",name:name,data:data})
+        message = @stringify({type:"event",name:name,data:data})
         if @connection
             try
                 @connection.send message
@@ -139,12 +160,14 @@ class MessageCenter extends (require "events").EventEmitter
         return message
     handleMessage:(message)->
         try
-            info = MessageCenter.parse(message)
+            info = MessageCenter.parse(message,{owner:this})
         catch e
             throw  new Error "invalid message #{message}"
-        if not info.type or info.type not in ["invoke","event","response"]
+        if not info.type or info.type not in ["invoke","event","response","stream"]
             throw  new Error "invalid message #{message} invalid info type"
-        if info.type is "response"
+        if info.type is "stream"
+            @handleStreamData(info)
+        else if info.type is "response"
             @handleResponse(info)
         else if info.type is "invoke"
             @handleInvoke(info)
@@ -194,6 +217,99 @@ class MessageCenter extends (require "events").EventEmitter
         while @invokeWaiters[0]
             waiter = @invokeWaiters[0]
             @clearInvokeWaiter(waiter.id,new Error "abort")
-        
+    createStream:()->
+        stream = new WritableStream(this)
+        return stream
+    handleStreamData:(info)->
+        if not info.id
+            throw new Error "invalid stream data #{JSON.stringify(info)}"
+        @streams.some (stream)->
+            if stream.id is info.id
+                if info.end
+                    stream.close()
+                else 
+                    stream.emit "data",info.data
+                return true
+    transferStream:(stream)->
+        # currently we just transfer what they give ,
+        # no matter it will block the connection or not.
+        # since the user side can always use and async method to write
+        # to the stream, to gain an none blocked connection.
+        #
+        # we may build a more durable stream implementation
+        # in cost of performance, by ensure the data recieved before send the
+        # next chunk of data. this will slow down the speed at high latency network
+        # of course.
+        # 
+        if @connection
+            try
+                # data should already been encoded
+                if stream.isEnd
+                    return
+                while stream.buffers.length > 0
+                    data = stream.buffers.shift()
+                    @connection.send data
+            catch e
+                # connection problem fail silently
+                return
+    endStream:(stream)->
+        @transferStream stream
+        if @connection
+            try
+                @connection.send JSON.stringify({id:stream.id,end:true,type:"stream"})
+                stream.isEnd = true
+            catch e
+                # connection problem fail silently
+                return
+    addStream:(stream)->
+        if stream not in @streams
+            @streams.push stream
+    removeStream:(stream)->
+        index = @streams.indexOf stream
+        if index < 0
+            return
+        @streams.splice(index,1)
+    @isReadableStream = (stream)->
+        return stream instanceof ReadableStream
+    @isWritableStream = (stream)->
+        return stream instanceof WritableStream
+class ReadableStream extends EventEmitter
+    # maybe some better id implementation with smaller size
+    # and less posibility to conflict between reconnect/reconstruction
+    @id = 1000
+    constructor:(@messageCenter)->
+        @id = ReadableStream.id++
+        @messageCenter.addStream(this)
+    close:()->
+        if @isClose
+            return
+        @isClose = true
+        @emit "end"
+        @messageCenter.removeStream this
+class WritableStream extends EventEmitter
+    @id = 1000
+    constructor:(@messageCenter)->
+        @buffers = []
+        @index = 0
+        @id = WritableStream.id++
+        @messageCenter.once "unsetConnection",()=>
+            @isEnd = true
+    write:(data)->
+        if @isEnd
+            throw new Error "stream already end"
+        if not data
+            return
+        # may throw error when stringify non supported 
+        @buffers.push @messageCenter.stringify {id:this.id,index:@index++,data:data,type:"stream"}
+        @messageCenter.transferStream this
+    end:(data)->
+        if @isEnd
+            throw new Error "stream already end"
+        @write data
+        @messageCenter.endStream this
+        if process and process.nextTick
+            process.nextTick ()=>@emit "finish"
+        else
+            setTimeout (()=>@emit "finish"),0
 module.exports = MessageCenter
 module.exports.MessageCenter = MessageCenter
