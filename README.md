@@ -57,7 +57,7 @@ mcServerSide.registerApi("areYouServer",function(data,callback){
 
 ```
 
-MessageCenter has a default timeout of 60s, if you don`t like it you can set it manually.
+MessageCenter has a default timeout of 60 * 1000 ms, if you don`t like it you can set it manually.
 ```javascript
 var invoke = mcClientSide.invoke("delayReturn",5000,function(err,data){
     console.error(err,data);

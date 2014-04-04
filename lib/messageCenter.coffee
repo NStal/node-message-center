@@ -88,7 +88,8 @@ class MessageCenter extends (require "events").EventEmitter
     response:(id,err,data)->
         message = MessageCenter.stringify({id:id,type:"response",data:data,error:err})
         if not @connection
-            @emit "message",message
+            # fail silently
+            # @emit "message",message
             return
         try
             @connection.send message
@@ -114,7 +115,7 @@ class MessageCenter extends (require "events").EventEmitter
                     clearTimeout @_timer
                 @_timer = setTimeout controller.clear,value
             ,clear:(error)=>
-                @clearInvokeWaiter waiter.id,error || "timeout"
+                @clearInvokeWaiter waiter.id,error || new Error "timeout"
         }
         
         waiter.controller = controller
@@ -123,8 +124,10 @@ class MessageCenter extends (require "events").EventEmitter
             try
                 @connection.send message
             catch e
-                controller.clear("connection not opened")
+                controller.clear(e)
                 return
+        else
+            controller.clear(new Error "connection not set")
         return controller
     fireEvent:(name,data)->
         message = MessageCenter.stringify({type:"event",name:name,data:data})
@@ -184,13 +187,13 @@ class MessageCenter extends (require "events").EventEmitter
                 target = api
                 break
         if not target
-            return @response(info.id,"#{info.name} api not found")
+            return @response(info.id,{message:"#{info.name} api not found",code:"ERRNOTFOUND"})
         target.handler info.data,(err,data)=>
             @response info.id,err,data
     clearAll:()->
         while @invokeWaiters[0]
             waiter = @invokeWaiters[0]
-            @clearInvokeWaiter(waiter.id,"abort")
+            @clearInvokeWaiter(waiter.id,new Error "abort")
         
 module.exports = MessageCenter
 module.exports.MessageCenter = MessageCenter
