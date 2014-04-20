@@ -1,9 +1,9 @@
-MessageCenter is a transfer layer independant RPC protocol base on json. It's a more human friendly protocol than machine friendly one. 
+MessageCenter is a transfer layer agnostic  RPC protocol base on json. It's a more human friendly protocol than machine friendly one. 
 
 Feature:
 1. transparent javascript type serialize (Buffer,Date)
 2. support reliable RPC call and not reliable event dispatch.
-3. support streaming with easy to use API.
+3. support nodejs streaming with easy to use API.
 
 To use this protocol the underlying transfer layer should meet these requirements.
 

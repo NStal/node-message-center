@@ -138,7 +138,6 @@ describe "test message center",()->
             done()
         Mb.clearAll()
     it "test clear all shouldn't fire already excuted invokes",(done)->
-        
         Mb.invoke "ping",{},(err,result)->
             console.assert not err
             console.assert result is "pong"
