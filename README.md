@@ -108,8 +108,9 @@ mcClientSide.invoke("anyApi",{},function(err,stream){
 ```
 
 # General error handle designs:
-1. Any error caused by underlying connection will just fail silently.
-2. Any error caused by broken data will emit an error event.
-3. Other exception like broken paramaters will just throw.
+1. Any error caused by underlying connection will just fail silently. (say throw error in send)
+2. Any error caused by broken data will emit an error event. (likely broken connection or some violation, you'd better unsetConnection immediately)
+3. Other exception like broken paramaters will just throw. (likely due to unmatched MessageCenter version)
 
 # Notes:
+

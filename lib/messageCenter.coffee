@@ -16,7 +16,7 @@
 # When it's an broken data format, emit an error. unlikely.
 #
 # In case of silent, invoke should eventually fail due to a timeout.
-# Other type of RPC are designed for totally not fail concerned.
+# Other type of RPC like events or stream,  are designed for totally not failure concerned.
 EventEmitter = (require "events").EventEmitter
 class MessageCenter extends EventEmitter
     @stringify:(obj)->
@@ -92,10 +92,7 @@ class MessageCenter extends EventEmitter
             if @connection isnt connection
                 # connection changed.. i can't handle you
                 return
-            try
-                @handleMessage(message)
-            catch e
-                @emit "error",e
+            @handleMessage(message)
         @connection.on "message",@_handler
     unsetConnection:()->
         if @connection
@@ -162,9 +159,11 @@ class MessageCenter extends EventEmitter
         try
             info = MessageCenter.parse(message,{owner:this})
         catch e
-            throw  new Error "invalid message #{message}"
+            @emit "error",new Error "invalid message #{message}"
+            return
         if not info.type or info.type not in ["invoke","event","response","stream"]
-            throw  new Error "invalid message #{message} invalid info type"
+            @emit "error",new Error "invalid message #{message} invalid info type"
+            return
         if info.type is "stream"
             @handleStreamData(info)
         else if info.type is "response"
@@ -174,15 +173,15 @@ class MessageCenter extends EventEmitter
         else if info.type is "event"
             @handleEvent(info)
         else
-            throw new Error "invalid message"
+            @emit "error",new Error "invalid message"
     handleEvent:(info)->
         if not info.name
-            throw new Error "invalid message #{JSON.stringify(info)}"
+            @emit "error",new Error "invalid message #{JSON.stringify(info)}"
         @emit "event/"+info.name,info.data
         
     handleResponse:(info)->
         if not info.id
-            throw new Error "invalid message #{JSON.stringify(info)}"
+            @emit "error",new Error "invalid message #{JSON.stringify(info)}"
         found = @invokeWaiters.some (waiter,index)=>
             if waiter.id is info.id
                 @clearInvokeWaiter(info.id,null);
@@ -203,7 +202,7 @@ class MessageCenter extends EventEmitter
             return true
     handleInvoke:(info)->
         if not info.id or not info.name
-            throw new Error "invalid message #{JSON.stringify(info)}"
+            @emit "error",new Error "invalid message #{JSON.stringify(info)}"
         target = null
         for api in @apis
             if api.name is info.name
@@ -222,7 +221,7 @@ class MessageCenter extends EventEmitter
         return stream
     handleStreamData:(info)->
         if not info.id
-            throw new Error "invalid stream data #{JSON.stringify(info)}"
+            @emit "error",new Error "invalid stream data #{JSON.stringify(info)}"
         @streams.some (stream)->
             if stream.id is info.id
                 if info.end
