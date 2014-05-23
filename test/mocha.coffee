@@ -121,11 +121,16 @@ describe "test message center",()->
             req.clear(new Error "customError")
         setTimeout clear,100
 
-    it "test event",(done)->
-        Ma.on "event/hello",(data)->
-            console.assert data is "hello"
+    it "test event with no parameters",(done)->
+        Ma.on "event/ping",()->
             done()
-        Mb.fireEvent "hello","hello"
+        Mb.fireEvent "ping"
+    it "test event with multipul parameters",(done)->
+        Ma.on "event/welcome",(data0,data1)->
+            console.assert data0 is "hello"
+            console.assert data1 is "world"
+            done()
+        Mb.fireEvent "welcome","hello","world"
     it "test clear all",(done)->
         first = false
         Mb.invoke "delay",1000,(err,result)->

@@ -147,8 +147,8 @@ class MessageCenter extends EventEmitter
         else
             controller.clear(new Error "connection not set")
         return controller
-    fireEvent:(name,data)->
-        message = @stringify({type:"event",name:name,data:data})
+    fireEvent:(name,params...)->
+        message = @stringify({type:"event",name:name,params:params})
         if @connection
             try
                 @connection.send message
@@ -177,7 +177,8 @@ class MessageCenter extends EventEmitter
     handleEvent:(info)->
         if not info.name
             @emit "error",new Error "invalid message #{JSON.stringify(info)}"
-        @emit "event/"+info.name,info.data
+        args = ["event/"+info.name].concat info.params or []
+        @emit.apply this,args
         
     handleResponse:(info)->
         if not info.id
